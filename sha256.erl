@@ -1,5 +1,5 @@
 -module(sha256).
--export([hexdigest/1]).
+-export([digest/1, hexdigest/1]).
 -define(INITIAL_DIGEST, [1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225]).
 -define(ROUND_CONSTANTS, [
   1116352408, 1899447441, 3049323471, 3921009573,  961987163, 1508970993, 2453635748, 2870763221, 3624381080,  310598401,
@@ -11,8 +11,11 @@
   2428436474, 2756734187, 3204031479, 3329325298
 ]).
 
+digest(Message) ->
+  words_to_bytes(process_chunks(chunk_message(pad_message(Message)))).
+
 hexdigest(Message) ->
-  process_chunks(chunk_message(pad_message(Message))).
+  lists:foldl(fun(Byte, HexDigest) -> HexDigest ++ byte_to_hex(Byte) end, [], digest(Message)).
 
 %% ---------------------------------------------
 %% UTIL
@@ -28,6 +31,15 @@ sum32(List) ->
 
 majority(A,B,C) ->
   A band (B bor C) bor B band C.
+
+byte_to_hex(Byte) ->
+  Hex = integer_to_list(Byte, 16),
+  pad_hex_byte(Hex, length(Hex)).
+
+pad_hex_byte(Hex, 2) ->
+  Hex;
+pad_hex_byte(Hex, 1) ->
+  [$0 | Hex].
 
 %% ---------------------------------------------
 %% MESSAGE PADDING
@@ -135,4 +147,24 @@ sha256_inner_iterate(Idx, Digest, State) ->
     lists:nth(5, Digest),
     lists:nth(6, Digest),
     lists:nth(7, Digest)
+  ].
+
+%% ---------------------------------------------
+%% Unpacking
+%% ---------------------------------------------
+
+words_to_bytes(WordList) ->
+  words_to_bytes([], WordList).
+
+words_to_bytes(ByteList, []) ->
+  ByteList;
+words_to_bytes(ByteList, [Word|WordList]) ->
+  words_to_bytes(ByteList ++ word_to_bytes(Word), WordList).
+
+word_to_bytes(Word) ->
+  [
+    (Word bsr 24) band 255,
+    (Word bsr 16) band 255,
+    (Word bsr 8) band 255,
+    Word band 255
   ].
