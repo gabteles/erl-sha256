@@ -1,170 +1,86 @@
 -module(sha256).
 -export([digest/1, hexdigest/1]).
--define(INITIAL_DIGEST, [1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225]).
--define(ROUND_CONSTANTS, [
-  1116352408, 1899447441, 3049323471, 3921009573,  961987163, 1508970993, 2453635748, 2870763221, 3624381080,  310598401,
-   607225278, 1426881987, 1925078388, 2162078206, 2614888103, 3248222580, 3835390401, 4022224774,  264347078,  604807628,
-   770255983, 1249150122, 1555081692, 1996064986, 2554220882, 2821834349, 2952996808, 3210313671, 3336571891, 3584528711,
-   113926993,  338241895,  666307205,  773529912, 1294757372, 1396182291, 1695183700, 1986661051, 2177026350, 2456956037,
-  2730485921, 2820302411, 3259730800, 3345764771, 3516065817, 3600352804, 4094571909,  275423344,  430227734,  506948616,
-   659060556,  883997877,  958139571, 1322822218, 1537002063, 1747873779, 1955562222, 2024104815, 2227730452, 2361852424,
-  2428436474, 2756734187, 3204031479, 3329325298
+-define(INITIAL_DIGEST, [
+  16#6A09E667, 16#BB67AE85, 16#3C6EF372, 16#A54FF53A, 16#510E527F, 16#9B05688C, 16#1F83D9AB, 16#5BE0CD19
 ]).
+-define(ROUND_CONSTANTS(X), lists:nth(X, [
+  16#428A2F98, 16#71374491, 16#B5C0FBCF, 16#E9B5DBA5, 16#3956C25B, 16#59F111F1, 16#923F82A4, 16#AB1C5ED5,
+  16#D807AA98, 16#12835B01, 16#243185BE, 16#550C7DC3, 16#72BE5D74, 16#80DEB1FE, 16#9BDC06A7, 16#C19BF174,
+  16#E49B69C1, 16#EFBE4786, 16#0FC19DC6, 16#240CA1CC, 16#2DE92C6F, 16#4A7484AA, 16#5CB0A9DC, 16#76F988DA,
+  16#983E5152, 16#A831C66D, 16#B00327C8, 16#BF597FC7, 16#C6E00BF3, 16#D5A79147, 16#06CA6351, 16#14292967,
+  16#27B70A85, 16#2E1B2138, 16#4D2C6DFC, 16#53380D13, 16#650A7354, 16#766A0ABB, 16#81C2C92E, 16#92722C85,
+  16#A2BFE8A1, 16#A81A664B, 16#C24B8B70, 16#C76C51A3, 16#D192E819, 16#D6990624, 16#F40E3585, 16#106AA070,
+  16#19A4C116, 16#1E376C08, 16#2748774C, 16#34B0BCB5, 16#391C0CB3, 16#4ED8AA4A, 16#5B9CCA4F, 16#682E6FF3,
+  16#748F82EE, 16#78A5636F, 16#84C87814, 16#8CC70208, 16#90BEFFFA, 16#A4506CEB, 16#BEF9A3F7, 16#C67178F2
+])).
 
 digest(Message) ->
-  words_to_bytes(process_chunks(chunk_message(pad_message(Message)))).
+  [ D1, D2, D3, D4, D5, D6, D7, D8 ] = base_digest(Message),
+  binary_to_list(<< D1:32, D2:32, D3:32, D4:32, D5:32, D6:32, D7:32, D8:32 >>).
 
 hexdigest(Message) ->
-  lists:foldl(fun(Byte, HexDigest) -> HexDigest ++ byte_to_hex(Byte) end, [], digest(Message)).
+  lists:flatten([io_lib:format("~8.16.0b", [X]) || X <- base_digest(Message)]).
+
+base_digest(Message) when is_binary(Message) ->
+  process_message(pad_message(Message));
+base_digest(Message) ->
+  base_digest(list_to_binary(Message)).
 
 %% ---------------------------------------------
 %% UTIL
 %% ---------------------------------------------
-pad32(X) ->
-  (X band 4294967295).
 
-right_rotate32(X,N) ->
-  (X bsr N) bor pad32(X bsl (32 - N)).
-
-sum32(List) ->
-  lists:foldl(fun(X, Acc) -> pad32(X + Acc) end, 0, List).
-
-majority(A,B,C) ->
-  A band (B bor C) bor B band C.
-
-byte_to_hex(Byte) ->
-  Hex = integer_to_list(Byte, 16),
-  pad_hex_byte(Hex, length(Hex)).
-
-pad_hex_byte(Hex, 2) ->
-  Hex;
-pad_hex_byte(Hex, 1) ->
-  [$0 | Hex].
+pad32(X) -> (X band 16#FFFFFFFF).
+right_rotate32(X,N) -> (X bsr N) bor pad32(X bsl (32 - N)).
+majority(A,B,C) -> A band (B bor C) bor B band C.
 
 %% ---------------------------------------------
 %% MESSAGE PADDING
 %% ---------------------------------------------
 
 pad_message(Message) ->
-  lists:append(Message, extra_bytes(length(Message))).
-
-extra_bytes(Len) ->
-  lists:append([separator_byte(), pad_bytes(Len), len_bytes(Len)]).
-
-separator_byte() ->
-  [128].
-
-pad_bytes(Len) ->
-  lists:duplicate(64 - ((Len + 9) rem 64), 0).
-
-len_bytes(Len) ->
-  fill_with_zeros(binary_to_list(binary:encode_unsigned(Len * 8, big)), 8).
-
-fill_with_zeros(List, Pad) ->
-  lists:append([
-    lists:duplicate(Pad - (length(List) rem Pad), 0),
-    List
-  ]).
-
-%% ---------------------------------------------
-%% MESSAGE CHUNKING
-%% ---------------------------------------------
-
-chunk_message(Message) ->
-  slice_16(byte_list_to_word_list(Message)).
-
-byte_list_to_word_list(ByteList) ->
-  byte_list_to_word_list([], ByteList).
-
-byte_list_to_word_list(WordList, []) ->
-  WordList;
-byte_list_to_word_list(WordList, [B1, B2, B3, B4 | ByteList]) ->
-  byte_list_to_word_list(WordList ++ [bytes_to_word(B1, B2, B3, B4)], ByteList).
-
-bytes_to_word(A,B,C,D) ->
-  (A bsl 24) bor (B bsl 16) bor (C bsl 8) bor D.
-
-slice_16(UnslicedList) ->
-  slice_16([], UnslicedList).
-
-slice_16(SlicedList, []) ->
-  SlicedList;
-slice_16(SlicedList, [A,B,C,D, E,F,G,H, I,J,K,L, M,N,O,P | WordList]) ->
-  slice_16(SlicedList ++ [[A,B,C,D, E,F,G,H, I,J,K,L, M,N,O,P]], WordList).
+  Len = size(Message) * 8,
+  Pad = 512 - (Len + 8 + 64) rem 512,
+  list_to_binary([Message, <<16#80:8, 0:Pad, Len:64>>]).
 
 %% ---------------------------------------------
 %% INTERATIONS
 %% ---------------------------------------------
 
-process_chunks(Chunks) ->
-  lists:foldl(
-    fun(Chunk, Digest) -> process_chunk(Digest, Chunk) end,
-    ?INITIAL_DIGEST,
-    Chunks
-  ).
+process_message(Message) ->
+  process_message(split_binary(Message, 64), ?INITIAL_DIGEST).
+process_message({ Chunk, <<>> }, Digest) ->
+  process_chunk(Chunk, Digest);
+process_message({ Chunk, Remaining }, Digest) ->
+  process_message(split_binary(Remaining, 64), process_chunk(Chunk, Digest)).
 
-process_chunk(Digest, State) ->
-  lists:map(
-    fun({A, B}) -> pad32(A + B) end,
-    lists:zip(Digest, sha256_iterate(complete_state(State), Digest))
-  ).
+process_chunk(State, Digest) ->
+  NextDigest = sha256_iterate(complete_state(State), Digest),
+  lists:map(fun({ A, B }) -> pad32(A + B) end, lists:zip(Digest, NextDigest)).
 
 complete_state(State) ->
-  complete_state(State, 0).
-
-complete_state(State, 48) ->
+  complete_state(State, 16).
+complete_state(State, 64) ->
   State;
 complete_state(State, Idx) ->
-  S0 = right_rotate32(lists:nth(Idx+2, State), 7) bxor right_rotate32(lists:nth(Idx+2, State), 18) bxor (lists:nth(Idx+2, State) bsr 3),
-  S1 = right_rotate32(lists:nth(Idx+15, State), 17) bxor right_rotate32(lists:nth(Idx+15, State), 19) bxor (lists:nth(Idx+15, State) bsr 10),
-  El = sum32([lists:nth(Idx+1, State), S0, lists:nth(Idx+10, State), S1]),
-  complete_state(State ++ [El], Idx+1).
+  Offset = 32 * (Idx - 16),
+  << _:Offset, Word1:32, Word2:32, _:224, Word3:32, _:128, Word4:32, _/binary >> = State,
+  S0 = right_rotate32(Word2, 7) bxor right_rotate32(Word2, 18) bxor (Word2 bsr 3),
+  S1 = right_rotate32(Word4, 17) bxor right_rotate32(Word4, 19) bxor (Word4 bsr 10),
+  El = pad32(Word1 + S0 + Word3 + S1),
+  complete_state(<< State/binary, El:32 >>, Idx+1).
 
 sha256_iterate(State, Digest) ->
-  lists:foldl(fun(Idx, IDigest) -> sha256_inner_iterate(Idx, IDigest, State) end, Digest, lists:seq(1, 64)).
-
-sha256_inner_iterate(Idx, Digest, State) ->
-  Ch = lists:nth(5, Digest) band lists:nth(6, Digest) bxor (bnot lists:nth(5, Digest)) band lists:nth(7, Digest),
-  S0 = right_rotate32(lists:nth(1, Digest), 2) bxor right_rotate32(lists:nth(1, Digest), 13) bxor right_rotate32(lists:nth(1, Digest), 22),
-  S1 = right_rotate32(lists:nth(5, Digest), 6) bxor right_rotate32(lists:nth(5, Digest), 11) bxor right_rotate32(lists:nth(5, Digest), 25),
-  T1 = sum32([
-    lists:nth(8, Digest),
-    S1,
-    Ch,
-    lists:nth(Idx, ?ROUND_CONSTANTS),
-    lists:nth(Idx, State)
-  ]),
-  T2 = sum32([
-    S0,
-    majority(lists:nth(1, Digest), lists:nth(2, Digest), lists:nth(3, Digest))
-  ]),
-  [
-    sum32([T1, T2]),
-    lists:nth(1, Digest),
-    lists:nth(2, Digest),
-    lists:nth(3, Digest),
-    sum32([lists:nth(4, Digest), T1]),
-    lists:nth(5, Digest),
-    lists:nth(6, Digest),
-    lists:nth(7, Digest)
-  ].
-
-%% ---------------------------------------------
-%% Unpacking
-%% ---------------------------------------------
-
-words_to_bytes(WordList) ->
-  words_to_bytes([], WordList).
-
-words_to_bytes(ByteList, []) ->
-  ByteList;
-words_to_bytes(ByteList, [Word|WordList]) ->
-  words_to_bytes(ByteList ++ word_to_bytes(Word), WordList).
-
-word_to_bytes(Word) ->
-  [
-    (Word bsr 24) band 255,
-    (Word bsr 16) band 255,
-    (Word bsr 8) band 255,
-    Word band 255
-  ].
+  sha256_iterate(1, Digest, State).
+sha256_iterate(65, Digest, _) ->
+  Digest;
+sha256_iterate(Idx, Digest, State) ->
+  StateOffset = 32 * (Idx - 1),
+  << _:StateOffset, StateKey:32, _/binary >> = State,
+  [ D1, D2, D3, D4, D5, D6, D7, D8 ] = Digest,
+  Ch = D5 band D6 bxor (bnot D5) band D7,
+  S0 = right_rotate32(D1, 2) bxor right_rotate32(D1, 13) bxor right_rotate32(D1, 22),
+  S1 = right_rotate32(D5, 6) bxor right_rotate32(D5, 11) bxor right_rotate32(D5, 25),
+  T1 = pad32(D8 + S1 + Ch + ?ROUND_CONSTANTS(Idx) + StateKey),
+  T2 = pad32(S0 + majority(D1, D2, D3)),
+  sha256_iterate(Idx + 1, [ pad32(T1 + T2), D1, D2, D3, pad32(D4 + T1), D5, D6, D7 ], State).
