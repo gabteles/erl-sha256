@@ -1,5 +1,5 @@
 -module(sha256).
--export([digest/1, hexdigest/1]).
+-export([digest/1, hexdigest/1, sample/0]).
 -define(INITIAL_DIGEST, [
   16#6A09E667, 16#BB67AE85, 16#3C6EF372, 16#A54FF53A, 16#510E527F, 16#9B05688C, 16#1F83D9AB, 16#5BE0CD19
 ]).
@@ -83,3 +83,14 @@ sha256_iterate(Idx, [ D1, D2, D3, D4, D5, D6, D7, D8 ], State) ->
   T1 = pad32(D8 + S1 + Ch + ?ROUND_CONSTANTS(Idx) + StateKey),
   T2 = pad32(S0 + majority(D1, D2, D3)),
   sha256_iterate(Idx + 1, [ pad32(T1 + T2), D1, D2, D3, pad32(D4 + T1), D5, D6, D7 ], State).
+
+%% ---------------------------------------------
+%% SAMPLE
+%% ---------------------------------------------
+sample() ->
+  sample(0).
+sample(100000) ->
+  halt(0);
+sample(X) ->
+  hexdigest("the quick brown fox jumps over the lazy dog"),
+  sample(X + 1).
