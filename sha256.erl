@@ -1,5 +1,5 @@
 -module(sha256).
--export([digest/1, hexdigest/1, sample/0]).
+-export([digest/1, hexdigest/1, sample/0, test/0]).
 -define(INITIAL_DIGEST, [
   16#6A09E667, 16#BB67AE85, 16#3C6EF372, 16#A54FF53A, 16#510E527F, 16#9B05688C, 16#1F83D9AB, 16#5BE0CD19
 ]).
@@ -94,3 +94,28 @@ sample(100000) ->
 sample(X) ->
   hexdigest("the quick brown fox jumps over the lazy dog"),
   sample(X + 1).
+
+%% ---------------------------------------------
+%% TESTS
+%% ---------------------------------------------
+-define(TEST_VECTOR, [
+  { "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "" },
+  { "05c6e08f1d9fdafa03147fcb8f82f124c76d2f70e3d989dc8aadb5e7d7450bec", "the quick brown fox jumps over the lazy dog" },
+  { "adaaf10e4a9a7c4a10110db8bd4fa25791af19737b3305bfecad11dc8573a4bd", "ASDASDASDASDASDASDASDASDASDASDASDASDASDASDASDASDASDASDASDASD" }
+]).
+
+test() ->
+  test(1, ?TEST_VECTOR).
+
+test(_, []) ->
+  ok;
+test(Count, [ { Expected, Input } | Remaining ]) ->
+  Result = hexdigest(Input),
+  try
+    Result = Expected,
+    io:format("test ~p passed~n", [Count]),
+    test(Count + 1, Remaining)
+  catch _:_ ->
+    io:format("error: expected ~s, got ~s~n", [Expected, Result]),
+    error
+  end.
