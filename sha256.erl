@@ -41,7 +41,7 @@ majority(A,B,C) -> A band (B bor C) bor B band C.
 pad_message(Message) ->
   Len = size(Message) * 8,
   Pad = 512 - (Len + 8 + 64) rem 512,
-  list_to_binary([Message, <<16#80:8, 0:Pad, Len:64>>]).
+  << Message/binary, 16#80:8, 0:Pad, Len:64 >>.
 
 %% ---------------------------------------------
 %% INTERATIONS
