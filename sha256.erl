@@ -74,10 +74,9 @@ sha256_iterate(State, Digest) ->
   sha256_iterate(1, Digest, State).
 sha256_iterate(65, Digest, _) ->
   Digest;
-sha256_iterate(Idx, Digest, State) ->
+sha256_iterate(Idx, [ D1, D2, D3, D4, D5, D6, D7, D8 ], State) ->
   StateOffset = 32 * (Idx - 1),
   << _:StateOffset, StateKey:32, _/binary >> = State,
-  [ D1, D2, D3, D4, D5, D6, D7, D8 ] = Digest,
   Ch = D5 band D6 bxor (bnot D5) band D7,
   S0 = right_rotate32(D1, 2) bxor right_rotate32(D1, 13) bxor right_rotate32(D1, 22),
   S1 = right_rotate32(D5, 6) bxor right_rotate32(D5, 11) bxor right_rotate32(D5, 25),
