@@ -15,8 +15,7 @@
 ])).
 
 digest(Message) ->
-  [ D1, D2, D3, D4, D5, D6, D7, D8 ] = base_digest(Message),
-  binary_to_list(<< D1:32, D2:32, D3:32, D4:32, D5:32, D6:32, D7:32, D8:32 >>).
+  binary_to_list(<< (base_digest(Message)):256 >>).
 
 hexdigest(Message) ->
   lists:flatten([io_lib:format("~8.16.0b", [X]) || X <- base_digest(Message)]).
